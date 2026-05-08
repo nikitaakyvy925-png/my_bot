@@ -1,3 +1,4 @@
 aiogram
 huggingface_hub
 pillow
+flask
