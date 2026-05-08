@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import io
+import os
+import urllib.parse
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
@@ -8,8 +10,10 @@ from aiogram.types import BufferedInputFile
 from huggingface_hub import InferenceClient
 
 # --- КОНФИГУРАЦИЯ ---
+# Токен бота оставляем здесь
 TG_TOKEN = "8634655293:AAED2rNfxpxJfDGdwA5BmYAgyWK7-WWUcqs"
-HF_TOKEN = "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" 
+# Токен HF берем ТОЛЬКО из настроек Render (Environment)
+HF_TOKEN = os.getenv("HF_TOKEN") 
 
 logging.basicConfig(level=logging.INFO)
 
@@ -18,62 +22,55 @@ dp = Dispatcher()
 client = InferenceClient(token=HF_TOKEN)
 
 user_history = {}
-# Расширили список мусорных слов
 STOP_WORDS = ["нарисуй", "сгенерируй", "картинка", "фото", "изобрази", "мне", "плиз", "пожалуйста", "сделай"]
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
     user_history[message.from_user.id] = [] 
-    await message.answer("🛠 Бот проапгрейжен! Теперь я лучше понимаю, что рисовать. Жги!")
+    await message.answer("🛠 Бот в сети и готов к работе!")
 
 @dp.message(F.text)
 async def handle_message(message: types.Message):
     user_id = message.from_user.id
     text = message.text
 
+    # ЛОГИКА КАРТИНОК
     if any(kw in text.lower() for kw in ["нарисуй", "изобрази", "картинка"]):
         prompt = text.lower()
         for kw in STOP_WORDS:
             prompt = prompt.replace(kw, "").strip()
         
         if not prompt:
-            await message.reply("А что именно рисовать?")
+            await message.reply("А что рисовать?")
             return
 
-        status_msg = await message.answer("🛸 Перевожу запрос и запускаю движки...")
-        
+        status_msg = await message.answer("🎨 Рисую... подожди секунд 15.")
+        await bot.send_chat_action(message.chat.id, "upload_photo")
+
         try:
-            # 1. Быстрый перевод через чат-модель для лучшего результата
+            # Сначала переводим для лучшего качества
             trans_res = client.chat_completion(
-                messages=[{"role": "user", "content": f"Translate to English only one short phrase: {prompt}"}],
+                messages=[{"role": "user", "content": f"Translate to English: {prompt}"}],
                 model="Qwen/Qwen2.5-72B-Instruct",
                 max_tokens=50
             )
-            english_prompt = trans_res.choices[0].message.content.strip()
-            
-            await status_msg.edit_text(f"🎨 Рисую: {english_prompt}...")
-            await bot.send_chat_action(message.chat.id, "upload_photo")
+            eng_prompt = trans_res.choices[0].message.content.strip()
 
-            # 2. Генерация картинки
-            image = client.text_to_image(
-                english_prompt,
-                model="black-forest-labs/FLUX.1-schnell"
-            )
+            image = client.text_to_image(eng_prompt, model="black-forest-labs/FLUX.1-schnell")
             
             img_byte_arr = io.BytesIO()
             image.save(img_byte_arr, format='JPEG')
             
             photo = BufferedInputFile(img_byte_arr.getvalue(), filename="art.jpg")
-            await message.answer_photo(photo=photo, caption=f"✅ Готово по запросу: {prompt}")
+            await message.answer_photo(photo=photo, caption=f"✅ Готово: {prompt}")
             await status_msg.delete()
             return
-
         except Exception as e:
-            logging.error(f"Ошибка: {e}")
-            await status_msg.edit_text("😢 Что-то пошло не так. Попробуй еще раз.")
+            logging.error(f"Error: {e}")
+            await status_msg.edit_text("😢 Ошибка при создании картинки.")
             return
 
-    # --- ЧАТ ---
+    # ЛОГИКА ЧАТА
     await bot.send_chat_action(message.chat.id, "typing")
     if user_id not in user_history: user_history[user_id] = []
     user_history[user_id].append({"role": "user", "content": text})
