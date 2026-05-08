@@ -9,7 +9,7 @@ from huggingface_hub import InferenceClient
 
 # --- КОНФИГУРАЦИЯ ---
 TG_TOKEN = "8634655293:AAED2rNfxpxJfDGdwA5BmYAgyWK7-WWUcqs"
-HF_TOKEN = "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" 
+HF_TOKEN = "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" 
 
 logging.basicConfig(level=logging.INFO)
 
