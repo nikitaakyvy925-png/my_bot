@@ -1,4 +1,3 @@
 aiogram
 huggingface_hub
 pillow
-python-3.10.12
